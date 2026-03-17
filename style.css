@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #050510;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Jua', sans-serif;
+    touch-action: none;
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    width: 800px;
+    height: 450px;
+    background: #000;
+    overflow: hidden;
+    box-shadow: 0 10px 50px rgba(220, 20, 60, 0.4);
+    border: 4px solid #b31b1b;
+    border-radius: 10px;
+}
+
+@media (max-width: 850px) {
+    #game-container {
+        width: 100vw;
+        height: 56.25vw; /* 16:9 ratio */
+        border: none;
+        border-radius: 0;
+    }
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 25, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    z-index: 10;
+}
+
+.overlay h1 {
+    font-size: 64px;
+    margin: 0 0 10px 0;
+    color: #e23636;
+    text-shadow: 4px 4px 0 #000, 0 0 20px rgba(226, 54, 54, 0.8);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+
+.overlay p {
+    font-size: 24px;
+    margin: 10px 0;
+    color: #f1f2f6;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.overlay .help-text {
+    font-size: 18px;
+    color: #a4b0be;
+    margin-bottom: 20px;
+}
+
+button {
+    font-family: 'Jua', sans-serif;
+    font-size: 28px;
+    padding: 12px 40px;
+    background: #e23636;
+    color: white;
+    border: 2px solid #000;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #891313, 0 0 15px rgba(226,54,54,0.5);
+    transition: transform 0.1s, box-shadow 0.1s;
+    margin-top: 20px;
+    outline: none;
+}
+
+button:active {
+    transform: translateY(6px);
+    box-shadow: 0 0 0 #891313;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.score-text {
+    font-size: 28px;
+    color: #fff;
+    text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+
+#dist-val, #coin-val {
+    color: #f1c40f;
+}
+
+/* Character Selection UI */
+.char-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    margin: 20px 0;
+    max-width: 600px;
+}
+
+.char-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 3px solid #555;
+    background: #222;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+    color: #fff;
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.1;
+    padding: 0;
+    margin: 0;
+    box-shadow: 0 4px 0 #111;
+}
+
+.char-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #111;
+    border-color: #aaa;
+}
+
+.char-btn.active {
+    border-color: #f1c40f;
+    box-shadow: 0 0 15px #f1c40f, 0 4px 0 #b7950b !important;
+    transform: translateY(2px);
+}
+
+/* Visual identity colors for buttons */
+.btn-spider { background: linear-gradient(135deg, #e23636 50%, #1d3557 50%); }
+.btn-iron { background: linear-gradient(135deg, #c0392b 50%, #f1c40f 50%); }
+.btn-cap { background: linear-gradient(135deg, #2980b9 33%, #fff 33%, #fff 66%, #c0392b 66%); color: #000; }
+.btn-hulk { background: linear-gradient(135deg, #27ae60 50%, #8e44ad 50%); }
+.btn-thor { background: linear-gradient(135deg, #95a5a6 50%, #c0392b 50%); }
+.btn-widow { background: #000; border-color: #c0392b; color: #c0392b; }
+.btn-hawk { background: linear-gradient(135deg, #8e44ad 50%, #2c3e50 50%); }

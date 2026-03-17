@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스파이더맨 런</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+        <div id="ui-layer">
+            <div class="score-text">DISTANCE: <span id="dist-val">0</span>m</div>
+            <div class="score-text">COINS: <span id="coin-val">0</span></div>
+        </div>
+        <div id="start-screen" class="overlay">
+            <h1>AVENGERS RUN</h1>
+            <p>클릭하여 도시를 가로지르세요</p>
+            <p class="help-text">점프: 클릭 | 로프/웹: 크레인 부근에서 클릭 유지</p>
+            
+            <div class="char-grid" id="char-selection">
+                <button class="char-btn btn-spider active" data-char="spider"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-iron" data-char="iron"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-cap" data-char="cap"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-hulk" data-char="hulk"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-thor" data-char="thor"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-widow" data-char="widow"><canvas width="60" height="60"></canvas></button>
+                <button class="char-btn btn-hawk" data-char="hawk"><canvas width="60" height="60"></canvas></button>
+            </div>
+            
+            <button id="start-btn" style="position: relative; z-index: 100;">GAME START</button>
+        </div>
+        <div id="game-over-screen" class="overlay" style="display: none;">
+            <h1>GAME OVER</h1>
+            <p>이동 거리: <span id="final-dist">0</span>m</p>
+            <p>획득 동전: <span id="final-coins">0</span></p>
+            <button id="restart-btn">RESTART</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const distVal = document.getElementById('dist-val');
+        const coinVal = document.getElementById('coin-val');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        
+        const CANVAS_W = 800;
+        const CANVAS_H = 450;
+        const GRAVITY = 0.65;
+        const JUMP_POWER = -12.5;
+        
+        let gameState = 'MENU';
+        let distanceTracker = 0;
+        let coinsCollected = 0;
+        let frameCount = 0;
+        let speedX = 8;
+        let cameraX = 0;
+        let animationId;
+        
+        let player = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            state: 'run',
+            anchor: null,
+            length: 0
+        };
+        
+        let roofs = [];
+        let coins = [];
+        let anchors = []; // Cranes that Spiderman can swing from
+        let stars = [];
+        let bgBuildings = [];
+        let midBuildings = [];
+        
+        function initMenu() {
+            distanceTracker = 0;
+            coinsCollected = 0;
+            frameCount = 0;
+            speedX = 8;
+            cameraX = 0;
+            
+            player = { x: 200, y: 350, vx: 0, vy: 0, state: 'run', anchor: null, length: 0 };
+            
+            roofs = [{ x: 0, y: 350, w: 2000 }];
+            coins = [];
+            anchors = [];
+            
+            // Generate Stars
+            stars = [];
+            for(let i=0; i<50; i++) {
+                stars.push({
+                    x: Math.random() * CANVAS_W,
+                    y: Math.random() * 250,
+                    size: Math.random() * 2,
+                    blinkSpeed: 0.02 + Math.random() * 0.05
+                });
+            }
+            
+            // Generate Background City
+            bgBuildings = [];
+            midBuildings = [];
+            for(let i = 0; i < 30; i++) {
+                bgBuildings.push(createBuildingNode(0.1, 150));
+            }
+            for(let i = 0; i < 20; i++) {
+                midBuildings.push(createBuildingNode(0.3, 250));
+            }
+            
+            draw();
+        }
+
+        function createBuildingNode(parallax, maxH) {
+            let hasWindows = Math.random() > 0.3;
+            let windows = [];
+            let w = 60 + Math.random() * 120;
+            let h = 100 + Math.random() * maxH;
+            
+            if (hasWindows) {
+                for (let wy = 20; wy < h - 20; wy += 25) {
+                    for (let wx = 10; wx < w - 20; wx += 20) {
+                        if (Math.random() > 0.4) {
+                            windows.push({x: wx, y: wy, color: Math.random() > 0.8 ? '#f1c40f' : '#fdf5e6'});
+                        }
+                    }
+                }
+            }
+            return {
+                x: Math.random() * 2000,
+                w: w, h: h,
+                hasWindows, windows,
+                color: parallax === 0.1 ? '#0a0a1a' : '#14142a'
+            };
+        }
+        
+        function startGame() {
+            initMenu();
+            gameState = 'PLAYING';
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            player.vx = speedX;
+            updateUI();
+            if(animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+        
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            document.getElementById('final-dist').innerText = Math.floor(distanceTracker / 50);
+            document.getElementById('final-coins').innerText = coinsCollected;
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        function updateUI() {
+            distVal.innerText = Math.floor(distanceTracker / 50);
+            coinVal.innerText = coinsCollected;
+        }
+        
+        function handleDown(e) {
+            if (e && e.target && e.target.tagName === 'BUTTON') return;
+            if (gameState !== 'PLAYING') return;
+        
+            if (player.state === 'run') {
+                player.vy = JUMP_POWER;
+                player.state = 'jump';
+                player.y -= 2;
+            } else if ((player.state === 'jump' || player.state === 'fall') && !player.anchor) {
+                // Find nearest valid anchor point ahead of player
+                let validAnchor = null;
+                let minDist = Infinity;
+                
+                for(let a of anchors) {
+                    // Anchor must be ahead of player and within ~600px
+                    if (a.x > player.x + 50 && a.x < player.x + 600) {
+                        let dx = a.x - player.x;
+                        let dy = a.y - player.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            validAnchor = a;
+                        }
+                    }
+                }
+                
+                if (validAnchor) {
+                    player.state = 'swing';
+                    player.anchor = { x: validAnchor.x, y: validAnchor.y };
+                    player.length = minDist;
+                }
+                // If no anchor found, player just continues falling.
+            }
+        }
+        
+        function handleUp(e) {
+            if (e && e.target && e.target.tagName === 'BUTTON') return;
+            if (player.state === 'swing') {
+                player.state = 'jump';
+                player.anchor = null;
+                player.vy = Math.min(player.vy, -2);
+            }
+        }
+        
+        canvas.addEventListener('mousedown', handleDown);
+        canvas.addEventListener('mouseup', handleUp);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleDown(e); }, {passive: false});
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); handleUp(e); }, {passive: false});
+        
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+        
+        function generateWorld() {
+            let lastRoof = roofs[roofs.length - 1];
+            
+            if (lastRoof.x - cameraX < CANVAS_W * 2) {
+                let difficulty = Math.min(distanceTracker / 30000, 1);
+                
+                let isGap = Math.random() > 0.2; // 80% chance for a gap
+                
+                let gapMin = 150 + difficulty * 100;
+                let gapMax = 300 + difficulty * 200;
+                let gap = isGap ? gapMin + Math.random() * (gapMax - gapMin) : 0;
+                
+                let widthMin = 200;
+                let widthMax = 600 - difficulty * 150;
+                let width = Math.max(widthMin + Math.random() * (widthMax - widthMin), 150);
+                
+                let yDelta = (Math.random() - 0.5) * (100 + difficulty * 100);
+                let newY = lastRoof.y + yDelta;
+                if (newY < 200) newY = 200;
+                if (newY > 400) newY = 400; 
+        
+                let rx = lastRoof.x + lastRoof.w + gap;
+                roofs.push({ x: rx, y: newY, w: width });
+                
+                // If there's a gap, spawn an Anchor (Crane) in the middle of the gap
+                if (isGap) {
+                    let anchorX = lastRoof.x + lastRoof.w + (gap * 0.6);
+                    let anchorY = -50 + (Math.random() * 50); // High up in the sky
+                    anchors.push({ x: anchorX, y: anchorY });
+                    
+                    // Spawn Arc Coins leading towards the gap and over it, guiding the swing
+                    let span = gap + 150;
+                    
+                    // We simulate the swing path. The anchor is at (anchorX, anchorY)
+                    // The player usually starts swinging around (lastRoof.x + lastRoof.w - 50, lastRoof.y - 20)
+                    let startX = lastRoof.x + lastRoof.w - 50;
+                    let startY = lastRoof.y - 20;
+                    
+                    let dxStart = startX - anchorX;
+                    let dyStart = startY - anchorY;
+                    let radius = Math.sqrt(dxStart*dxStart + dyStart*dyStart);
+                    let startAngle = Math.atan2(dyStart, dxStart);
+                    
+                    // The end of the gap is rx. We want the swing to take us past rx.
+                    let endX = rx + 50;
+                    let dxEnd = endX - anchorX;
+                    // Because it's a pendulum swinging forward, the angle goes from something like 160 deg to 20 deg
+                    let endAngle = Math.atan2(Math.abs(dyStart), dxEnd); 
+                    // Make sure endAngle is smaller than startAngle since we are swinging right (clockwise-ish in canvas coords? Actually in canvas +y is down)
+                    // At start: dx is negative, dy is positive -> Angle is ~ 2.0 rad
+                    // At end: dx is positive, dy is positive -> Angle is ~ 1.1 rad
+                    
+                    // Continuous stream of 8 coins over the gap forming the pendulum arc
+                    for(let i=1; i<=8; i++) {
+                        let pct = i / 9;
+                        // Interpolate angle
+                        let currentAngle = startAngle + (endAngle - startAngle) * pct;
+                        
+                        let cx = anchorX + Math.cos(currentAngle) * radius;
+                        let cy = anchorY + Math.sin(currentAngle) * radius;
+                        
+                        coins.push({
+                            x: cx, y: cy,
+                            type: Math.random() > 0.9 ? 'gold' : 'silver',
+                            collected: false
+                        });
+                    }
+                }
+                
+                // Spawn Continuous Coins on the roof
+                let coinSpacing = 40;
+                let numCoins = Math.floor((width - 100) / coinSpacing);
+                for(let i=0; i<numCoins; i++) {
+                    coins.push({
+                        x: rx + 50 + i * coinSpacing,
+                        y: newY - 40,
+                        type: Math.random() > 0.95 ? 'gold' : 'silver',
+                        collected: false
+                    });
+                }
+            }
+            
+            // Clean up old objects
+            if (roofs.length > 2 && roofs[0].x + roofs[0].w < cameraX - 200) roofs.shift();
+            anchors = anchors.filter(a => a.x > cameraX - 200);
+            coins = coins.filter(c => !c.collected && c.x > cameraX - 100);
+        }
+        
+        function gameLoop() {
+            if (gameState !== 'PLAYING') return;
+            frameCount++;
+            
+            speedX = 8 + Math.min(distanceTracker / 6000, 8);
+            
+            if (player.state === 'run') {
+                player.vx = speedX;
+                player.vy = 0;
+            } else {
+                player.vy += GRAVITY;
+            }
+            
+            player.x += player.vx;
+            player.y += player.vy;
+            distanceTracker += player.vx;
+
+            // 천장 화면 밖으로 올라가지 못하게 막기 (화면 상단 약간 위까지만 허용)
+            if (player.y < -50) {
+                player.y = -50;
+                if (player.vy < 0) player.vy = 0;
+            }
+            
+            if (player.state === 'swing') {
+                let dx = player.x - player.anchor.x;
+                let dy = player.y - player.anchor.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > player.length) {
+                    let diff = dist - player.length;
+                    player.x -= (dx/dist) * diff;
+                    player.y -= (dy/dist) * diff;
+                    
+                    let dot = (player.vx * dx + player.vy * dy) / dist;
+                    player.vx -= (dx/dist) * dot;
+                    player.vy -= (dy/dist) * dot;
+                }
+                player.vx += 0.2;
+                
+                // 강제로 속도감 유지 (원래 달리는 속도보다 느려지지 않게 방지)
+                if (player.vx < speedX) {
+                    player.vx = speedX;
+                }
+            }
+            
+            let onRoof = false;
+            for (let r of roofs) {
+                if (player.x + 10 > r.x && player.x - 10 < r.x + r.w) {
+                    if (player.vy >= 0 && player.y >= r.y - 15 && player.y - player.vy <= r.y + 15) {
+                        player.y = r.y;
+                        player.vy = 0;
+                        if(player.state !== 'swing') {
+                            player.state = 'run';
+                            player.vx = speedX;
+                        }
+                        onRoof = true;
+                    }
+                }
+                if ((player.state === 'fall' || player.state === 'jump') && !onRoof) {
+                    if (player.x + 15 >= r.x && player.x - 15 <= r.x + 15 && player.y > r.y + 10) {
+                        player.vx = 0; 
+                    }
+                }
+            }
+            
+            if (!onRoof && player.state === 'run') {
+                player.state = 'fall';
+            }
+            
+            for (let c of coins) {
+                if (!c.collected) {
+                    let dx = player.x - c.x;
+                    let dy = (player.y - 20) - c.y;
+                    if (dx*dx + dy*dy < 1000) { 
+                        c.collected = true;
+                        coinsCollected += c.type === 'gold' ? 30 : 10;
+                        updateUI();
+                    }
+                }
+            }
+            
+            let targetCameraX = player.x - 200;
+            cameraX += (targetCameraX - cameraX) * 1.0; 
+            
+            generateWorld();
+            
+            if (player.y > CANVAS_H + 50 || player.x < cameraX - 50) {
+                gameOver();
+                return;
+            }
+            
+            if (frameCount % 5 === 0) updateUI();
+            
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        let selectedChar = 'spider';
+        
+        // --- Draw Character Portraits on Selection Buttons ---
+        function renderPortraits() {
+            document.querySelectorAll('.char-btn').forEach(btn => {
+                let ch = btn.dataset.char;
+                let btnCanvas = btn.querySelector('canvas');
+                if(btnCanvas) {
+                    let btnCtx = btnCanvas.getContext('2d');
+                    let originalCtx = ctx; 
+                    ctx = btnCtx; 
+                    let prevChar = selectedChar;
+                    selectedChar = ch;
+                    
+                    ctx.save();
+                    ctx.translate(30, 45); 
+                    drawCharacter(0, 0, 'run', 0); 
+                    ctx.restore();
+                    
+                    ctx = originalCtx;
+                    selectedChar = prevChar;
+                }
+                
+                btn.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    document.querySelectorAll('.char-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    selectedChar = btn.dataset.char;
+                });
+            });
+        }
+        
+        startBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startGame();
+        });
+        restartBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startGame();
+        });
+        
+        function drawCharacter(x, y, state, frame) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Adjust scale/bulk for Hulk
+            if (selectedChar === 'hulk') {
+                ctx.scale(0.95, 0.95); // Slightly larger relative feel implicitly via thicker strokes later
+            } else {
+                ctx.scale(0.8, 0.8);
+            }
+            
+            // Setup Colors and Web/Tether visual
+            let primary = '#000', secondary = '#fff', skin = '#ffeaa7', tetherSrc = '#fff';
+            let headType = 'mask', accType = 'none';
+            
+            switch(selectedChar) {
+                case 'spider': primary = '#e23636'; secondary = '#1d3557'; headType = 'spidey'; tetherSrc = '#fff'; break;
+                case 'iron': primary = '#c0392b'; secondary = '#f1c40f'; headType = 'iron'; tetherSrc = '#00f2fe'; break;
+                case 'cap': primary = '#2980b9'; secondary = '#c0392b'; headType = 'cap'; accType = 'shield'; tetherSrc = '#fff'; break;
+                case 'hulk': primary = '#27ae60'; secondary = '#8e44ad'; headType = 'hulk'; tetherSrc = '#55efc4'; break; // Shockwave leap
+                case 'thor': primary = '#34495e'; secondary = '#c0392b'; headType = 'thor'; accType = 'hammer'; tetherSrc = '#00d2ff'; break; // Lightning tether
+                case 'widow': primary = '#2d3436'; secondary = '#e23636'; headType = 'widow'; tetherSrc = '#a4b0be'; break;
+                case 'hawk': primary = '#6c5ce7'; secondary = '#2d3436'; headType = 'hawk'; accType = 'bow'; tetherSrc = '#a4b0be'; break;
+            }
+            
+            // Web/Tether line from wrist if swinging
+            if (state === 'swing' && player.anchor) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(15, -20); // Wrist
+                let sFactor = selectedChar === 'hulk' ? 0.95 : 0.8;
+                let relX = player.anchor.x - x;
+                let relY = player.anchor.y - y;
+                ctx.lineTo(relX / sFactor, relY / sFactor);
+                ctx.strokeStyle = tetherSrc;
+                ctx.lineWidth = selectedChar === 'thor' || selectedChar === 'iron' ? 4 : 2;
+                if (selectedChar === 'thor' || selectedChar === 'iron') {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = tetherSrc;
+                }
+                ctx.globalAlpha = 0.8;
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            // --- DRAW HEAD ---
+            if (headType === 'hulk') {
+                ctx.fillStyle = primary; // Green skin
+                ctx.beginPath(); ctx.arc(0, -32, 16, 0, Math.PI * 2); ctx.fill();
+                // Hair
+                ctx.fillStyle = '#0a3d1b';
+                ctx.beginPath(); ctx.arc(0, -38, 14, Math.PI, Math.PI*2); ctx.fill();
+            } else if (headType === 'iron') {
+                ctx.fillStyle = primary; // Red Helmet
+                ctx.beginPath(); ctx.arc(0, -30, 15, 0, Math.PI * 2); ctx.fill();
+                // Faceplate
+                ctx.fillStyle = secondary; // Gold
+                ctx.fillRect(-8, -38, 16, 14);
+                ctx.fillStyle = '#00f2fe'; // Glowing eyes
+                ctx.fillRect(-5, -34, 4, 2);
+                ctx.fillRect(3, -34, 4, 2);
+            } else if (headType === 'cap') {
+                ctx.fillStyle = primary; // Blue Helmet
+                ctx.beginPath(); ctx.arc(0, -30, 15, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = skin; // Exposed jaw
+                ctx.fillRect(-10, -25, 20, 10);
+                // "A" symbol (simplified)
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Arial'; ctx.fillText('A', -3, -32);
+            } else if (headType === 'widow') {
+                ctx.fillStyle = skin;
+                ctx.beginPath(); ctx.arc(0, -30, 13, 0, Math.PI * 2); ctx.fill();
+                // Red Hair
+                ctx.fillStyle = '#d35400';
+                ctx.beginPath(); ctx.arc(0, -35, 14, Math.PI, Math.PI*2); ctx.fill();
+                ctx.fillRect(-15, -35, 30, 10);
+            } else if (headType === 'hawk') {
+                ctx.fillStyle = skin;
+                ctx.beginPath(); ctx.arc(0, -30, 13, 0, Math.PI * 2); ctx.fill();
+            } else if (headType === 'thor') {
+                ctx.fillStyle = skin;
+                ctx.beginPath(); ctx.arc(0, -30, 14, 0, Math.PI * 2); ctx.fill();
+                // Blonde Hair/Helmet
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(-16, -35, 32, 15);
+                ctx.fillStyle = '#7f8c8d'; // Helmet wings
+                ctx.beginPath(); ctx.arc(-14, -35, 5, 0, Math.PI*2); ctx.arc(14, -35, 5, 0, Math.PI*2); ctx.fill();
+            } else {
+                // Spidey Mask
+                ctx.fillStyle = primary;
+                ctx.beginPath(); ctx.arc(0, -30, 15, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(-2, -37); ctx.quadraticCurveTo(-10, -38, -12, -32); ctx.quadraticCurveTo(-8, -28, -2, -30); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(8, -37); ctx.quadraticCurveTo(16, -38, 18, -32); ctx.quadraticCurveTo(14, -28, 8, -30); ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+            
+            // --- DRAW BODY ---
+            let bodyExt = selectedChar === 'hulk' ? 14 : 10;
+            ctx.strokeStyle = selectedChar === 'iron' || selectedChar === 'cap' || selectedChar === 'hulk' || selectedChar === 'widow' ? primary : secondary;
+            if (selectedChar === 'cap' || selectedChar === 'thor') ctx.strokeStyle = '#34495e'; // Dark upper body
+            if (selectedChar === 'iron') ctx.strokeStyle = '#c0392b';
+            
+            if (selectedChar === 'thor') {
+                // Cape flutter
+                ctx.fillStyle = '#c0392b';
+                let capeW = 20 + Math.sin(frame * 0.5) * 5;
+                ctx.fillRect(-capeW, -15, capeW*1.5, 30);
+            }
+            
+            ctx.lineWidth = bodyExt;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, 5); ctx.stroke(); // Torso
+            
+            // Chest detail
+            if (selectedChar === 'spider') {
+                ctx.strokeStyle = primary; ctx.lineWidth = 8;
+                ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, -2); ctx.stroke();
+            } else if (selectedChar === 'iron') {
+                ctx.fillStyle = '#00f2fe';
+                ctx.beginPath(); ctx.arc(0, -8, 4, 0, Math.PI*2); ctx.fill(); // Arc reactor
+            } else if (selectedChar === 'cap') {
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(0, -8, 3, 0, Math.PI*2); ctx.fill(); // Star
+                ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke(); // Stripes
+            }
+            
+            // --- DRAW LIMBS ---
+            let legTop = (selectedChar === 'spider') ? secondary : (selectedChar === 'hulk' ? secondary : primary);
+            let legBot = (selectedChar === 'spider' || selectedChar === 'iron' || selectedChar === 'cap') ? primary : '#111'; // Boots
+            if (selectedChar === 'hulk') legBot = primary; // Green feet
+            
+            let armTop = (selectedChar === 'spider') ? secondary : primary;
+            let armBot = (selectedChar === 'spider' || selectedChar === 'iron' || selectedChar === 'cap') ? primary : skin;
+            if (selectedChar === 'widow' || selectedChar === 'hawk') armBot = primary;
+            if (selectedChar === 'thor') armBot = skin;
+            
+            // Accessories Rendering Helper
+            const drawAccessory = (accX, accY) => {
+                ctx.save();
+                ctx.translate(accX, accY);
+                if (accType === 'shield') {
+                    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.font = '6px Arial'; ctx.fillText('*', -2, 3);
+                } else if (accType === 'hammer') {
+                    ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-6, -4, 12, 8);
+                    ctx.fillStyle = '#8e44ad'; ctx.fillRect(-1, 4, 3, 10);
+                } else if (accType === 'bow') {
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(-5, 5, 12, -Math.PI/2, Math.PI/2); ctx.stroke();
+                    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(-5, -7); ctx.lineTo(-5, 17); ctx.stroke();
+                }
+                ctx.restore();
+            };
+            
+            if (state === 'run') {
+                let swing = Math.sin(frame * 0.6) * 18;
+                // Legs
+                ctx.strokeStyle = legTop;
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-swing*0.7, 15); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(swing*0.7, 15); ctx.stroke();
+                // Boots
+                ctx.strokeStyle = legBot;
+                ctx.beginPath(); ctx.moveTo(-swing*0.7, 15); ctx.lineTo(-swing, 22); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(swing*0.7, 15); ctx.lineTo(swing, 22); ctx.stroke();
+                
+                // Arms
+                ctx.lineWidth = selectedChar === 'hulk' ? 10 : 6;
+                ctx.strokeStyle = armTop;
+                ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(swing*0.6, -5); ctx.stroke();
+                ctx.strokeStyle = armBot;
+                ctx.beginPath(); ctx.moveTo(swing*0.6, -5); ctx.lineTo(swing*0.9 + 5, -2); ctx.stroke();
+                
+                if (accType !== 'none') drawAccessory(swing*0.9 + 5, -2);
+                
+            } else if (state === 'jump' || state === 'fall') {
+                // Tucked pose
+                ctx.strokeStyle = legTop;
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-12, 10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(12, 10); ctx.stroke();
+                ctx.strokeStyle = legBot;
+                ctx.beginPath(); ctx.moveTo(-12, 10); ctx.lineTo(-15, 18); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(12, 10); ctx.lineTo(15, 18); ctx.stroke();
+                
+                ctx.lineWidth = selectedChar === 'hulk' ? 10 : 6;
+                ctx.strokeStyle = armBot; 
+                ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(15, -25); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-15, -25); ctx.stroke();
+                
+                if (accType !== 'none') drawAccessory(15, -25);
+                
+            } else if (state === 'swing') {
+                ctx.lineWidth = selectedChar === 'hulk' ? 10 : 6;
+                ctx.strokeStyle = armTop;
+                ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, -20); ctx.stroke();
+                ctx.strokeStyle = armBot;
+                ctx.beginPath(); ctx.moveTo(10, -20); ctx.lineTo(15, -30); ctx.stroke(); // Reaching arm
+                
+                ctx.strokeStyle = armBot;
+                ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-10, 0); ctx.stroke(); // Down arm
+                if (accType !== 'none') drawAccessory(-10, 0);
+                
+                ctx.lineWidth = bodyExt;
+                ctx.strokeStyle = legTop;
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-15, 8); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-5, 14); ctx.stroke();
+                ctx.strokeStyle = legBot;
+                ctx.beginPath(); ctx.moveTo(-15, 8); ctx.lineTo(-25, 10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-5, 14); ctx.lineTo(-12, 22); ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            
+            // Dark Night Sky gradient
+            let grd = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+            grd.addColorStop(0, '#020111'); // very dark blue
+            grd.addColorStop(0.6, '#20124d'); // dark purple
+            grd.addColorStop(1, '#000022'); // dark blue at horizon
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+            
+            // Draw Stars
+            ctx.fillStyle = '#fff';
+            stars.forEach(s => {
+                let currentAlpha = 0.5 + Math.sin(frameCount * s.blinkSpeed) * 0.5;
+                ctx.globalAlpha = currentAlpha;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+            
+            // Moon
+            ctx.fillStyle = '#fdf5e6';
+            ctx.beginPath();
+            ctx.arc(CANVAS_W - 100, 100, 40, 0, Math.PI*2);
+            ctx.fill();
+            // Moon craters (stylized)
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.beginPath(); ctx.arc(CANVAS_W - 110, 90, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(CANVAS_W - 80, 110, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(CANVAS_W - 105, 120, 6, 0, Math.PI*2); ctx.fill();
+            
+            
+            // Parallax Background Buildings
+            let drawBuildings = (buildings, parallaxSpeed) => {
+                buildings.forEach(b => {
+                    let pX = (b.x - cameraX * parallaxSpeed) % 2000;
+                    if (pX < -b.w) b.x += 2000;
+                    
+                    ctx.fillStyle = b.color;
+                    ctx.fillRect(pX, CANVAS_H - b.h, b.w, b.h);
+                    
+                    if (b.hasWindows) {
+                        b.windows.forEach(w => {
+                            ctx.fillStyle = w.color;
+                            ctx.globalAlpha = 0.7;
+                            ctx.fillRect(pX + w.x, CANVAS_H - b.h + w.y, 8, 12);
+                        });
+                        ctx.globalAlpha = 1.0;
+                    }
+                });
+            };
+            
+            drawBuildings(bgBuildings, 0.1);
+            drawBuildings(midBuildings, 0.3);
+            
+            ctx.save();
+            ctx.translate(-Math.floor(cameraX), 0);
+            
+            // Draw Cranes (Anchors)
+            anchors.forEach(a => {
+                // Draw Crane Tower
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 10;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, CANVAS_H); ctx.stroke();
+                
+                // Crane Arm
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 6;
+                ctx.beginPath(); ctx.moveTo(a.x - 50, a.y); ctx.lineTo(a.x + 150, a.y - 20); ctx.stroke();
+                
+                // Anchor point highlight
+                ctx.fillStyle = '#e23636';
+                ctx.beginPath(); ctx.arc(a.x, a.y, 6, 0, Math.PI*2); ctx.fill();
+            });
+            
+            // Coins
+            coins.forEach(c => {
+                if (!c.collected) {
+                    ctx.fillStyle = c.type === 'gold' ? '#f1c40f' : '#bdc3c7';
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, c.type === 'gold' ? 12 : 10, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.strokeStyle = c.type === 'gold' ? '#d35400' : '#7f8c8d';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    // Glint
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(c.x - 3, c.y - 5, 4, 4);
+                }
+            });
+            
+            // Foreground Roofs
+            roofs.forEach(r => {
+                // Roof Body
+                ctx.fillStyle = '#111'; // Very dark
+                ctx.fillRect(r.x, r.y, r.w, CANVAS_H - r.y);
+                
+                // Ledge highlight
+                let grad = ctx.createLinearGradient(r.x, r.y, r.x, r.y + 15);
+                grad.addColorStop(0, '#333');
+                grad.addColorStop(1, '#111');
+                ctx.fillStyle = grad;
+                ctx.fillRect(r.x, r.y, r.w, 15);
+                ctx.strokeStyle = '#000';
+                ctx.strokeRect(r.x, r.y, r.w, 15);
+            });
+            
+            // Player
+            drawCharacter(player.x, player.y, player.state, frameCount);
+            
+            ctx.restore();
+        }
+        
+        initMenu();
+        renderPortraits();
+    </script>
+</body>
+</html>
