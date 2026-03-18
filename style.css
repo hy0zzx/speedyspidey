@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     width: 100%;
@@ -28,7 +29,8 @@ body, html {
 @media (max-width: 850px) {
     #game-container {
         width: 100vw;
-        height: 56.25vw; /* 16:9 ratio */
+        height: 56.25vw;
+        /* 16:9 ratio */
         border: none;
         border-radius: 0;
     }
@@ -86,7 +88,7 @@ button {
     border: 2px solid #000;
     border-radius: 30px;
     cursor: pointer;
-    box-shadow: 0 6px 0 #891313, 0 0 15px rgba(226,54,54,0.5);
+    box-shadow: 0 6px 0 #891313, 0 0 15px rgba(226, 54, 54, 0.5);
     transition: transform 0.1s, box-shadow 0.1s;
     margin-top: 20px;
     outline: none;
@@ -114,58 +116,69 @@ button:active {
     text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 
-#dist-val, #coin-val {
+#dist-val,
+#coin-val {
     color: #f1c40f;
 }
 
-/* Character Selection UI */
-.char-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    justify-content: center;
-    margin: 20px 0;
-    max-width: 600px;
+.overlay.victory {
+    background: transparent;
+    justify-content: flex-start;
+    padding-top: 50px;
 }
 
-.char-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: 3px solid #555;
-    background: #222;
-    cursor: pointer;
-    transition: all 0.2s;
+.overlay.victory h1, .overlay.victory p {
+    text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+
+#ranking-input-section {
+    margin: 15px 0;
     display: flex;
-    justify-content: center;
+    gap: 10px;
     align-items: center;
-    font-size: 12px;
-    color: #fff;
-    font-weight: bold;
+}
+
+#nickname-input {
+    font-family: 'Jua', sans-serif;
+    padding: 10px 15px;
+    font-size: 20px;
+    border-radius: 8px;
+    border: 3px solid #000;
+    outline: none;
+    background: #fff;
+    color: #333;
+    width: 180px;
+}
+
+#ranking-board-section {
+    background: rgba(10, 10, 20, 0.8);
+    padding: 15px 30px;
+    border-radius: 10px;
+    margin: 10px 0 20px 0;
+    border: 3px solid #f1c40f;
+    box-shadow: 0 0 15px #f1c40f;
+}
+
+#ranking-board-section h2 {
+    margin: 0 0 15px 0;
+    color: #f1c40f;
+    font-size: 26px;
     text-align: center;
-    line-height: 1.1;
+    text-shadow: 2px 2px 0 #000;
+}
+
+#ranking-list {
+    list-style: none;
     padding: 0;
     margin: 0;
-    box-shadow: 0 4px 0 #111;
+    text-align: left;
+    font-size: 22px;
+    color: #fff;
 }
 
-.char-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 0 #111;
-    border-color: #aaa;
+#ranking-list li {
+    margin: 8px 0;
+    border-bottom: 2px dashed #555;
+    padding-bottom: 5px;
+    text-shadow: 1px 1px 0 #000;
 }
-
-.char-btn.active {
-    border-color: #f1c40f;
-    box-shadow: 0 0 15px #f1c40f, 0 4px 0 #b7950b !important;
-    transform: translateY(2px);
-}
-
-/* Visual identity colors for buttons */
-.btn-spider { background: linear-gradient(135deg, #e23636 50%, #1d3557 50%); }
-.btn-iron { background: linear-gradient(135deg, #c0392b 50%, #f1c40f 50%); }
-.btn-cap { background: linear-gradient(135deg, #2980b9 33%, #fff 33%, #fff 66%, #c0392b 66%); color: #000; }
-.btn-hulk { background: linear-gradient(135deg, #27ae60 50%, #8e44ad 50%); }
-.btn-thor { background: linear-gradient(135deg, #95a5a6 50%, #c0392b 50%); }
-.btn-widow { background: #000; border-color: #c0392b; color: #c0392b; }
-.btn-hawk { background: linear-gradient(135deg, #8e44ad 50%, #2c3e50 50%); }
